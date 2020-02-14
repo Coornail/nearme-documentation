@@ -1,0 +1,188 @@
+---
+converter: markdown
+metadata:
+  title: Build a ToDo List App
+  description:
+---
+
+This guide will help you understand the process of building a ToDo List App. We will let the user create ToDo Lists and add Tasks to them, then display and have the option to delete previously created ToDo Lists and Tasks. 
+@TODO link hello world
+
+## Step 1: Workflow
+
+### Create a new directory
+```sh
+mkdir todolist
+```
+
+### Add your environment
+```
+pos-cli env add <environment> --email <your email> --url <your application url>
+```
+
+## Step 2: Create a new ToDo List
+
+Create a new model for the list: 
+
+### model_schemas/list.yml
+```yaml
+name: list
+properties:
+- name: name
+  type: string
+```
+
+Create a form to add the newly created list to the database:
+
+### forms/list_add.yml
+```yaml
+---
+name: list_add
+resource: list
+resource_owner: anyone
+redirect_to: /
+fields:
+  properties:
+    name:
+      validation:
+        presence: true
+---
+
+<h2>Add list</h2>
+
+{% form %}
+  <div class="row">
+    <div class="form-group col-6">
+      <label for="name">Name:</label>
+      <input name="{{ form.fields.properties.name.name }}" value="{{ form.fields.properties.name.value }}" id="name" type="text" class="form-control">
+      {% if form.errors['properties.name'] %}
+        <p>{{ form.errors['properties.name'] }}</p>
+      {% endif %}
+    </div>
+  </div>
+  <button class="btn btn-primary btn-lg">Add</button>
+{% endform %}
+```
+
+The name of the list is mandatory, `forms.errors['properties.name']` will render an error message if it is missing.
+
+## Step 3: Display previously created ToDo Lists
+
+Prepare a partial to display the lists as a table.
+### views/partials/lists/lists.liquid
+```liquid
+<h2>Lists</h2>
+<table>
+  <tr>
+    <th>Name</th>
+    <th></th>
+    <th></th>
+  </tr>
+  {% for list in lists %}
+  <tr>
+    <td>{{ list.name }}</td>
+    <td>
+      <a href="/lists/{{ list.id }}">Details</a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>%
+```
+
+Prepare a graphql query to display the lists.
+
+### graphql/lists.graphql
+```graphql
+query get_lists($id: ID) {
+  models(filter: {id: {value: $id}, deleted_at: {exists: false}, model_schema_name: {value: "list"}}) {
+    results {
+      id
+      name: property(name: "name")
+    }
+  }
+}
+```
+
+Change the homepage to render the partial. We will accept a second parameter after the root document as a list id (`context.params.slug2`) and will display the list details there.
+
+### views/pages/home.html.liquid
+```liquid
+---
+---
+{%- assign id = context.params.slug2 -%}
+{%- graphql g = "get_lists", id: id -%}
+
+{%- if id == blank -%}
+  {% include_form 'add_list' %}
+  {% include 'lists/list', lists: g.models.results, id: id %}
+{%- else -%}
+  {% include 'lists/show', list: g.models.results.first %}
+{%- endif -%}
+```
+
+@TODO see text informing about no lists to be displayed if there are lists to be displayed
+
+## Step 4: Add option to change the name of an existing ToDo List
+
+### Create an edit form for the list
+### forms/list_edit.liquid
+```liquid
+---
+name: list_edit
+resource: list
+resource_owner: anyone
+redirect_to: /lists
+fields:
+  properties:
+    name:
+      validation:
+        presence: true
+---
+
+<h2>Edit list</h2>
+
+{% form %}
+  <div class="row">
+    <div class="form-group col-6">
+      <label for="name">Name:</label>
+      <input name="{{ form.fields.properties.name.name }}" value="{{ form.fields.properties.name.value }}" id="name" type="text" class="form-control">
+      {% if form.errors['properties.name'] %}
+        <p>{{ form.errors['properties.name'] }}</p>
+      {% endif %}
+    </div>
+  </div>
+  <button class="btn btn-primary btn-lg">Save</button>
+{% endform %}
+```
+
+### Create the show details partial
+@TODO
+### views/partials/lists/show.liquid
+```liquid
+<h1>{{ list.name }}</h1>
+<a href="/">Back to the list overview page</a>
+
+{%- graphql g = "get_todos", id: id -%}
+
+{% include_form "list_edit_form", id: context.params.slug2 %}
+
+{% if g.models.results.size == 0 %}
+    {% include_form "list_delete", id: context.params.slug2 %}
+{% endif %}
+
+<hr>
+{% include 'todo_item/list', todos: g.models.results, list_id: context.params.slug2 %}
+
+<hr>
+{% include_form 'todo_item', list_id: context.params.slug2 %}%
+```
+
+## Step 5: Create ToDo List details page
+@TODO be able to see a List details page, which displays a name of selected List
+@TODO add the possibility to create a task associated with that List. Task should have mandatory field "content" which is at least 5 characters long
+@TODO stay on the details List page after creating/deleting a Task
+@TODO display all tasks associated with that List. If there are no tasks, I would like to see a text informing about it
+@TODO delete Task associated with that List
+
+## Step 6: Add option to delete a ToDo list
+@TODO only if there are no tasks associated with it
